@@ -1,0 +1,38 @@
+{
+  "default_settings": {
+    "region": "us-west-2",
+    "timeout_minutes": 60,
+    "capacity_preference": "open"
+  },
+  "common_configurations": {
+    "web_servers": {
+      "instance_type": "m5.large",
+      "availability_zone": "us-west-2a",
+      "count": 10,
+      "description": "Web服务器实例预留"
+    },
+    "compute_intensive": {
+      "instance_type": "c5.xlarge", 
+      "availability_zone": "us-west-2b",
+      "count": 20,
+      "description": "计算密集型工作负载"
+    },
+    "memory_optimized": {
+      "instance_type": "r5.large",
+      "availability_zone": "us-west-2c", 
+      "count": 5,
+      "description": "内存优化实例"
+    },
+    "high_performance": {
+      "instance_type": "r7i.metal-24xl",
+      "availability_zone": "us-west-2a",
+      "count": 2,
+      "description": "高性能裸金属实例"
+    }
+  },
+  "availability_zones": {
+    "us-west-2": ["us-west-2a", "us-west-2b", "us-west-2c", "us-west-2d"],
+    "us-east-1": ["us-east-1a", "us-east-1b", "us-east-1c", "us-east-1d", "us-east-1f"],
+    "eu-west-1": ["eu-west-1a", "eu-west-1b", "eu-west-1c"]
+  }
+}
