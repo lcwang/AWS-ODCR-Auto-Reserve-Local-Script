@@ -3,7 +3,7 @@
 Amazon EC2 On-Demand Capacity Reservation (ODCR) 本地自动化管理工具，支持智能拆分购买和实时进度显示。
 
 ## 🔗 相关项目
-- **AWS托管版本**: [[ODCR-AWS-Serverless](https://github.com/lcwang/ODCR-AWS-Serverless) ](https://github.com/lcwang/AWS-ODCR-Auto-Reserve-Serverless)- 基于Step Functions和Lambda的企业级解决方案
+- **AWS托管版本**: https://github.com/lcwang/AWS-ODCR-Auto-Reserve-Serverless - 基于Step Functions和Lambda的企业级解决方案
 
 ## 快速开始
 
