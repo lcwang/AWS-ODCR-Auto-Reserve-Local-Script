@@ -198,6 +198,130 @@ class ODCRManager:
         print(f"📊 总尝试次数: {attempt_count_total}")
         
         return result
+    
+    def expand_existing_odcr(self, odcr_id: str, target_increase: int, timeout_minutes: int = 60):
+        """扩容现有ODCR，支持拆分购买"""
+        print(f"🎯 目标: 为ODCR {odcr_id} 增加 {target_increase} 台实例")
+        print(f"⏰ 超时设置: {timeout_minutes} 分钟")
+        print("=" * 60)
+        
+        start_time = datetime.now()
+        timeout = timedelta(minutes=timeout_minutes)
+        last_status_time = start_time
+        
+        # 获取初始容量
+        try:
+            response = self.ec2.describe_capacity_reservations(CapacityReservationIds=[odcr_id])
+            if not response['CapacityReservations']:
+                print(f"❌ ODCR {odcr_id} 不存在")
+                return {'success': False, 'error': 'ODCR not found'}
+            
+            initial_capacity = response['CapacityReservations'][0]['TotalInstanceCount']
+            instance_type = response['CapacityReservations'][0]['InstanceType']
+            availability_zone = response['CapacityReservations'][0]['AvailabilityZone']
+            
+            print(f"📊 当前容量: {initial_capacity} 台 ({instance_type} 在 {availability_zone})")
+        except Exception as e:
+            print(f"❌ 无法获取ODCR信息: {str(e)}")
+            return {'success': False, 'error': f'Failed to get ODCR info: {str(e)}'}
+        
+        current_increased = 0
+        current_attempt_size = target_increase
+        attempt_count_total = 0
+        
+        while current_increased < target_increase and datetime.now() - start_time < timeout:
+            elapsed = datetime.now() - start_time
+            
+            # 每30秒显示一次详细状态
+            if datetime.now() - last_status_time >= timedelta(seconds=30):
+                current_capacity = initial_capacity + current_increased
+                print(f"\n⏱️  运行状态更新 ({str(elapsed).split('.')[0]}):")
+                print(f"   📈 扩容进度: +{current_increased}/{target_increase} 台")
+                print(f"   📊 当前容量: {current_capacity} 台")
+                print(f"   🔄 总尝试次数: {attempt_count_total}")
+                last_status_time = datetime.now()
+            
+            remaining_increase = target_increase - current_increased
+            attempt_increase = min(current_attempt_size, remaining_increase)
+            attempt_count_total += 1
+            
+            print(f"\n🔄 第{attempt_count_total}次尝试: 扩容 +{attempt_increase} 台")
+            current_capacity = initial_capacity + current_increased
+            self.print_status(current_increased, target_increase, [], elapsed)
+            
+            try:
+                # 获取当前容量并尝试扩容
+                response = self.ec2.describe_capacity_reservations(CapacityReservationIds=[odcr_id])
+                current_capacity = response['CapacityReservations'][0]['TotalInstanceCount']
+                new_capacity = current_capacity + attempt_increase
+                
+                self.ec2.modify_capacity_reservation(
+                    CapacityReservationId=odcr_id,
+                    InstanceCount=new_capacity
+                )
+                
+                current_increased += attempt_increase
+                print(f"\n✅ 扩容成功! ODCR {odcr_id} 现有 {new_capacity} 台 (+{attempt_increase})")
+                self.print_status(current_increased, target_increase, [], elapsed)
+                
+                # 成功后重置尝试大小
+                if current_increased < target_increase:
+                    current_attempt_size = target_increase - current_increased
+                    print(f"\n⏳ 等待30秒后继续扩容剩余 {target_increase - current_increased} 台...")
+                    
+                    for i in range(30, 0, -1):
+                        elapsed = datetime.now() - start_time
+                        print(f"\r⏳ 等待中... {i}秒 | ", end='')
+                        self.print_status(current_increased, target_increase, [], elapsed)
+                        time.sleep(1)
+                    print()
+                
+            except Exception as e:
+                error_str = str(e)
+                if 'InsufficientCapacity' in error_str or 'InsufficientInstanceCapacity' in error_str:
+                    # 容量不足，减半重试
+                    new_attempt_size = max(1, current_attempt_size // 2)
+                    if new_attempt_size == current_attempt_size:
+                        print(f"\n⚠️  即使+1台也容量不足，等待30秒后重试...")
+                        for i in range(30, 0, -1):
+                            elapsed = datetime.now() - start_time
+                            print(f"\r⚠️  容量不足等待中... {i}秒 | ", end='')
+                            self.print_status(current_increased, target_increase, [], elapsed)
+                            time.sleep(1)
+                        print()
+                    else:
+                        current_attempt_size = new_attempt_size
+                        print(f"\n⚠️  容量不足，降级到 +{current_attempt_size} 台重试")
+                        time.sleep(5)
+                else:
+                    print(f"\n❌ 永久错误: {error_str}")
+                    break
+        
+        # 最终结果
+        elapsed = datetime.now() - start_time
+        final_capacity = initial_capacity + current_increased
+        print(f"\n" + "=" * 60)
+        
+        result = {
+            'success': current_increased > 0,
+            'odcr_id': odcr_id,
+            'initial_capacity': initial_capacity,
+            'target_increase': target_increase,
+            'actual_increase': current_increased,
+            'final_capacity': final_capacity,
+            'total_attempts': attempt_count_total,
+            'elapsed_time': str(elapsed).split('.')[0],
+            'completed': current_increased >= target_increase
+        }
+        
+        if result['completed']:
+            print(f"🎉 扩容完成! ODCR {odcr_id} 成功增加 {current_increased} 台，总容量: {final_capacity}")
+        else:
+            print(f"⏰ 扩容结束! 在 {elapsed} 内为ODCR {odcr_id} 增加了 {current_increased}/{target_increase} 台")
+        
+        print(f"📊 总尝试次数: {attempt_count_total}")
+        
+        return result
 
 def main():
     parser = argparse.ArgumentParser(description='ODCR本地管理工具 - 优先扩容现有ODCR')
@@ -211,6 +335,12 @@ def main():
     create_parser.add_argument('--count', type=int, required=True, help='实例数量')
     create_parser.add_argument('--preference', default='open', choices=['open', 'targeted'], help='容量偏好')
     create_parser.add_argument('--timeout', type=int, default=60, help='超时时间(分钟)')
+    
+    # 扩容现有ODCR命令
+    expand_parser = subparsers.add_parser('expand', help='扩容现有ODCR')
+    expand_parser.add_argument('--odcr-id', required=True, help='ODCR ID')
+    expand_parser.add_argument('--count', type=int, required=True, help='增加数量')
+    expand_parser.add_argument('--timeout', type=int, default=60, help='超时时间(分钟)')
     
     args = parser.parse_args()
     
@@ -227,6 +357,19 @@ def main():
                 availability_zone=args.availability_zone,
                 target_count=args.count,
                 capacity_preference=args.preference,
+                timeout_minutes=args.timeout
+            )
+            print(f"\n📋 最终结果:")
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        except KeyboardInterrupt:
+            print(f"\n\n⚠️  用户中断执行")
+            sys.exit(1)
+    
+    elif args.command == 'expand':
+        try:
+            result = manager.expand_existing_odcr(
+                odcr_id=args.odcr_id,
+                target_increase=args.count,
                 timeout_minutes=args.timeout
             )
             print(f"\n📋 最终结果:")

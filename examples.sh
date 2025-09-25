@@ -21,9 +21,9 @@ python odcr_manager.py create --instance-type c5.xlarge --availability-zone us-w
 
 echo -e "\n"
 
-# 4. 高端实例 - 容量受限场景
-echo "4. 创建3台r7i.metal-24xl实例 (高端实例，容量受限)"
-python odcr_manager.py create --instance-type r7i.metal-24xl --availability-zone us-west-2a --count 3 --timeout 10
+# 4. 扩容现有ODCR - 需要提供真实的ODCR ID
+echo "4. 扩容现有ODCR (请替换为真实的ODCR ID)"
+echo "python odcr_manager.py expand --odcr-id cr-xxxxxxxxx --count 5 --timeout 10"
 
 echo -e "\n"
 
